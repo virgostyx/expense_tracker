@@ -14,7 +14,13 @@ module ExpenseTracker
       instance_double('ExpenseTracker::Ledger')
     }
 
+    def expect_response_to(block)
+      parsed = JSON.parse(last_response.body)
+      expect(parsed).to block
+    end
+
     describe 'POST /expenses' do
+
       context 'when the expense is successfully recorded' do
         let(:expense) { { 'some' => 'data' } }
 
@@ -26,8 +32,7 @@ module ExpenseTracker
 
         it 'returns the expense id' do
           post '/expenses', JSON.generate(expense)
-          parsed = JSON.parse(last_response.body)
-          expect(parsed).to include('expense_id' => 417)
+          expect_response_to include('expense_id' => 417)
         end
 
         it 'responds with a 200 (OK)' do
@@ -47,13 +52,51 @@ module ExpenseTracker
 
         it 'returns an error message' do
           post '/expenses', JSON.generate(expense)
-          parsed = JSON.parse(last_response.body)
-          expect(parsed).to include('error' => 'Expense incomplete')
+          expect_response_to include('error' => 'Expense incomplete')
         end
 
         it 'responds with 422 (Unprocessable entity' do
           post '/expenses', JSON.generate(expense)
           expect(last_response.status).to eq(422)
+        end
+      end
+    end
+
+    describe 'GET /expenses/:date' do
+      context 'when expenses exist on the given date' do
+        before do
+          allow(ledger).to receive(:expenses_on)
+                             .with('2017-06-12')
+                             .and_return(%w[expense_1 expense_2])
+        end
+
+        it 'returns the expense records as JSON' do
+          get '/expenses/2017-06-12'
+
+          parsed = JSON.parse(last_response.body)
+          expect(parsed).to eq(%w[expense_1 expense_2])
+        end
+        it 'responds with a 200 (OK)' do
+          get '/expenses/2017-06-12'
+          expect(last_response.status).to eq(200)
+        end
+      end
+
+      context 'when there are no expenses on the given date' do
+        before do
+          allow(ledger).to receive(:expenses_on)
+                             .with('2017-06-12')
+                             .and_return([])
+        end
+
+        it 'returns an empty array as JSON' do
+          get '/expenses/2017-06-12'
+          parsed = JSON.parse(last_response.body)
+          expect(parsed).to eq([])
+        end
+        it 'responds with a 200 (OK)' do
+          get '/expenses/2017-06-12'
+          expect(last_response.status).to eq(200)
         end
       end
     end
